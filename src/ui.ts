@@ -1,175 +1,230 @@
-import {AntGame, AntColony, Place, Hive} from './game';
-import {Ant, EaterAnt, GuardAnt} from './ants';
+//User Interface for The Affair Manager
+//Code adapted from Joel Ross at the University of Wisconsin
+//@author James Church
 
-import vorpal = require('vorpal');
-import chalk = require('chalk');
-import _ = require('lodash');
+import readlineSync = require('readline-sync'); //for easier repeated prompts
+import {AffairManager} from './manager';
 
 /**
- * The Vorpal library for command-line interaction
+ * Function to run the UI
  */
-const Vorpal = vorpal();
-
-export function showMapOf(game:AntGame){
-  console.log(getMap(game));
+export function start() {
+  showMainMenu(new AffairManager());
 }
 
-function getMap(game:AntGame) {
-  let places:Place[][] = game.getPlaces();
-  let tunnelLength = places[0].length;
-  let beeIcon = chalk.bgYellow.black('B');
-   
-  let map = '';
+/**
+ * The main menu. Will show until the user exits
+ */
+function showMainMenu(em:AffairManager) {
+  while(true){ //run until we exit
+    console.log(`Welcome to the Affair Manager! Pick an option:
+  1. Register a new member
+  2. Register a new affair
+  3. Register a new organization
+  4. Add a member to an affair
+  5. Modify an affair
+  6. Add an affair to an organization
+  7. List affair members
+  8. Exit`);
 
-  map += chalk.bold('The Colony is under attack!\n');
-  map += `Turn: ${game.getTurn()}, Food: ${game.getFood()}, Boosts available: [${game.getBoostNames()}]\n`;
-  map += '     '+_.range(0,tunnelLength).join('    ')+'      Hive'+'\n';
-   
-  for(let i=0; i<places.length; i++){
-    map += '    '+Array(tunnelLength+1).join('=====');
+    let response = readlineSync.question('> ')
+    if(response === '8' || response.slice(0,2).toLowerCase() === ':q'){
+      break; //stop looping, thus leaving method
+    }
+
+    switch(response) { //handle each response
+      case '1': showNewMemberMenu(em); break;
+      case '2': showNewAffairMenu(em); break;
+      case '3': showNewOrganizationMenu(em); break;
+      case '4': showAddToAffairMenu(em); break;
+      case '5': showModifyAffairMenu(em); break;
+      case '6': showAddToOrganizationMenu(em); break;
+      case '7': showListAffairMembersMenu(em); break;
+      //case 8 handled above
+      default: console.log('Invalid option!');
+    }
+    console.log(''); //extra empty line for revisiting
+  }
+}
+
+/**
+ * Show menu to add a new member
+ */
+function showNewMemberMenu(em:AffairManager) {
+  console.log('Add a new member.');
+  let name:string = readlineSync.question('  Name: ');
+  let email:string = readlineSync.question('  Email: ');
+
+  em.addMember(name, email);
+
+  console.log('User added!');
+}
+
+/** 
+ * Show menu to add a new affair. Will then show menu to add members to the affair
+ */
+function showNewAffairMenu(em:AffairManager) {
+  console.log('Add a new affair.');
+  let affairName:string = readlineSync.question('  Title of affair: ');
+  let zipcode:string = readlineSync.question('  Location (zip code): ');
+  let date:string = readlineSync.question('  Date and time (ex: Jan 21 2017 13:00 PST): ');
+
+  em.addAffair(affairName, zipcode, date);
+
+  showAddToAffairMenu(em, affairName); //add users to new affair
+}
+
+/**
+ * Show menu to add a new organization. Will then show menu to add affairs to the organization
+ */
+function showNewOrganizationMenu(em:AffairManager) {
+  console.log('Add a new organization.');
+  let organizationName:string = readlineSync.question('  Title of organization: ');
+
+  em.addOrganization(organizationName);
+
+  let adding = readlineSync.question('Add affairs to organization? (y/n): ');
+  while(adding.toLowerCase().startsWith('y')){ //while adding members    
+    showAddToOrganizationMenu(em, organizationName); //add affairs to new organization
+    adding = readlineSync.question('Add another affair? (y/n): ');
+  }
+}
+
+/**
+ * Show menu to add a member to an affair. Will repeat to add multiple members. Will show menu to search for an affair if none is provided.
+ */
+function showAddToAffairMenu(em:AffairManager, affairName?:string) {
+  if(!affairName){
+    affairName = showSearchAffairsMenu(em);
+    if(!affairName){ return }//if didn't select an affair
+  }
+
+  let adding = readlineSync.question('Add a member to affair? (y/n): ');
+  while(adding.toLowerCase().startsWith('y')){ //while adding members    
+    let memberName = showSearchMembersMenu(em); //find a member
+    if(memberName){ //if selected someone
+      em.addMemberToAffair(memberName, affairName);
+    } else {
+      console.log('No member selected.')
+    }
+    adding = readlineSync.question('Add another member? (y/n): ');
+  }
+}
+
+/**
+ * Show menu to look up a member. Will return undefined if no member selected.
+ */
+function showSearchMembersMenu(em:AffairManager) : string|undefined {
+  let query:string = _promptForQuery('member');
+  return _searchListMenu('member', em.findMemberNames(query));
+}
+
+/**
+ * Show menu to look up an affair. Will return undefined if no affair selected.
+ */
+function showSearchAffairsMenu(em:AffairManager) : string|undefined {
+  let query:string = _promptForQuery('affair');
+  return _searchListMenu('affair', em.findAffairNames(query));
+}
+
+/**
+ * Show menu to look up a organization. Will return undefined if no organization selected.
+ */
+function showSearchOrganizationsMenu(em:AffairManager) : string|undefined {
+  let query:string = _promptForQuery('organization');
+  return _searchListMenu('organization', em.findOrganizationNames(query));
+}
+
+/**
+ * Helper function that prompts the user for a query.
+ */
+function _promptForQuery(type: string): string {
+  console.log(`Searching for a ${type}.`)
+  return readlineSync.question('Search query: ');
+}
+
+/**
+ * Helper function that shows a menu to search a list of items and choose a result.
+ * Will return undefiend if no item is selected
+ */
+function _searchListMenu(type:string, results:string[]) : string|undefined {
+  if(results.length > 0) {
+    console.log('Results found: ');
+    let resultsDisplay = '  '+(results.map((item:string, idx:number) => `${idx+1}. ${item}`).join('\n  '));
+    console.log(resultsDisplay);
     
-    if(i===0){
-      map += '    ';
-      let hiveBeeCount = game.getHiveBeesCount();
-      if(hiveBeeCount > 0){
-        map += beeIcon;
-        map += (hiveBeeCount > 1 ? hiveBeeCount : ' ');
-      }
-    }
-    map += '\n';
+    let choiceIdx = parseInt(readlineSync.question(`Choose a ${type} (1-${results.length}): `)); //will covert to number or NaN
 
-    map += i+')  ';
-      
-    for(let j=0; j<places[i].length; j++){ 
-      let place:Place = places[i][j];
-
-      map += iconFor(place.getAnt());
-      map += ' '; 
-
-      if(place.getBees().length > 0){
-        map += beeIcon;
-        map += (place.getBees().length > 1 ? place.getBees().length : ' ');
-      } else {
-        map += '  ';
-      }
-      map += ' '; 
-    }
-    map += '\n    ';
-    for(let j=0; j<places[i].length; j++){
-      let place = places[i][j];
-      if(place.isWater()){
-        map += chalk.bgCyan('~~~~')+' ';
-      } else {
-        map += '==== ';
-      }
-    }
-    map += '\n';
+    return results[choiceIdx-1]; //will return undefined if invalid index
+  } else {
+    console.log('No results found.')
+    return undefined;
   }
-  map += '     '+_.range(0,tunnelLength).join('    ')+'\n';
-
-  return map;
 }
 
-
-function iconFor(ant:Ant){
-  if(ant === undefined){ return ' ' };
-  let icon:string;
-  switch(ant.name){
-    case "Grower":
-      icon = chalk.green('G'); break;
-    case "Thrower":
-      icon = chalk.red('T'); break;
-    case "Eater":
-      if((<EaterAnt>ant).isFull())
-        icon = chalk.yellow.bgMagenta('E');
-      else
-        icon = chalk.magenta('E');
-      break;
-    case "Scuba":
-      icon = chalk.cyan('S'); break;
-    case "Guard":
-      let guarded:Ant = (<GuardAnt>ant).getGuarded();
-      if(guarded){
-        icon = chalk.underline(iconFor(guarded)); break;
-      } else {
-        icon = chalk.underline('x'); break;
-      }
-    default:
-      icon = '?';
+/**
+ * Show menu to modify affair (title, time, or organization). Will show menu to search for an affair if none is provided.
+ */
+function showModifyAffairMenu(em:AffairManager, affairName?:string) {
+  if(!affairName){
+    affairName = showSearchAffairsMenu(em);
+    if(!affairName){ return }//if didn't select an affair
   }
-  return icon;
+
+  while(true){ //run until we exit
+    console.log(`Edit affair '${affairName}'.
+  1. Change title
+  2. Change time
+  3. Add to organization
+  4. Return to previous menu`);
+
+    let response:number = parseInt(readlineSync.question('> '));
+    if(response == 1){
+      let newTitle = readlineSync.question('  New title: ');
+      em.modifyAffair(affairName, newTitle);
+    }
+    else if(response == 2){
+      let newTime = readlineSync.question('  New date and time (ex: Jan 21 2017 13:00 PST): ');
+      em.modifyAffair(affairName, undefined, newTime); //no name to change
+    }
+    else if(response == 3){
+      showAddToOrganizationMenu(em, undefined, affairName);
+    }
+    else if(response == 4){ break; //exit from loop to return
+    } else {
+      console.log('Invalid option!');
+    }
+  }
 }
 
+/**
+ * Show menu to add an affair to a organization. Will show menus to search for an affair and a organization if either is not provided.
+ */
+function showAddToOrganizationMenu(em:AffairManager, organizationName?:string, affairName?:string, ) {
+  if(!affairName){ //if affair not yet specified
+    affairName = showSearchAffairsMenu(em);
+    if(!affairName){ return }//if didn't select an affair
+  }
 
-export function play(game:AntGame) {
-  Vorpal
-    .delimiter(chalk.green('AvB $'))
-    .log(getMap(game))
-    .show();
+  if(!organizationName){ //if organization not yet specified
+    organizationName = showSearchOrganizationsMenu(em);
+    if(!organizationName){ return }//if didn't select a organization
+  }
 
-  Vorpal
-    .command('show', 'Shows the current game board.')
-    .action(function(args, callback){
-      Vorpal.log(getMap(game));
-      callback();
-    });
+  //add the affair to the organization
+  em.addAffairToOrganization(affairName, organizationName);
+}
 
-  Vorpal
-    .command('deploy <antType> <tunnel>', 'Deploys an ant to tunnel (as "row,col" eg. "0,6").')
-    .alias('add', 'd')
-    .autocomplete(['Grower','Thrower','Eater','Scuba','Guard'])
-    .action(function(args, callback) {
-      let error = game.deployAnt(args.antType, args.tunnel)
-      if(error){
-        Vorpal.log(`Invalid deployment: ${error}.`);
-      }
-      else {
-        Vorpal.log(getMap(game));
-      }
-      callback();
-    });
+/**
+ * Show a list of members participating in an affair. Will show menu to search for an affair. Should include outputting member's email addresses.
+ */
+function showListAffairMembersMenu(em:AffairManager) {
+  let affairName = showSearchAffairsMenu(em);
 
-  Vorpal
-    .command('remove <tunnel>', 'Removes the ant from the tunnel (as "row,col" eg. "0,6").')
-    .alias('rm')
-    .action(function(args, callback){
-      let error = game.removeAnt(args.tunnel);
-      if(error){
-        Vorpal.log(`Invalid removal: ${error}.`);
-      }
-      else {
-        Vorpal.log(getMap(game));
-      }
-      callback();
-    });
+  let members = em.getMembers(affairName);
 
-  Vorpal
-    .command('boost <boost> <tunnel>', 'Applies a boost to the ant in a tunnel (as "row,col" eg. "0,6")')
-    .alias('b')
-    .autocomplete({data:() => game.getBoostNames()})
-    .action(function(args, callback){
-      let error = game.boostAnt(args.boost, args.tunnel);
-      if(error){
-        Vorpal.log(`Invalid boost: ${error}`);
-      }
-      callback();
-    })
+  console.log('Members participating in this action:')
+  console.log('  '+members.join('\n  ')+'\n');
 
-  Vorpal
-    .command('turn', 'Ends the current turn. Ants and bees will act.')
-    .alias('end turn', 'take turn','t')
-    .action(function(args, callback){
-      game.takeTurn();
-      Vorpal.log(getMap(game));
-      let won:boolean = game.gameIsWon();
-      if(won === true){
-        Vorpal.log(chalk.green('Yaaaay---\nAll bees are vanquished. You win!\n'));
-      }
-      else if(won === false){
-        Vorpal.log(chalk.yellow('Bzzzzz---\nThe ant queen has perished! Please try again.\n'));
-      }
-      else {
-        callback();
-      }
-    });
+  readlineSync.keyInPause('(Press any letter to continue)', {guide:false}); //so have time to read stuff
 }
