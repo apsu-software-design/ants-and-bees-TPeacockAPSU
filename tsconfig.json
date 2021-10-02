@@ -1,12 +1,16 @@
 {
-    "compilerOptions": {
-        "target": "es5",
-        "module": "commonjs",
-        "sourceMap": true,
-        "outDir": "build/",
-        "removeComments": true,
-        "alwaysStrict": true
-    },
+  "compilerOptions": {
+    "target": "es5",
+    "module": "commonjs",
+    "sourceMap": true,
+    "outDir": "build/",
+    "removeComments": true,
+    "alwaysStrict": true
+  },
+  "typedocOptions": {
+    "entryPoints": [ "./src/index.ts", "src/ants.ts", "src/game.ts", "src/ui.ts" ],
+    "out":  "docs"
+  },
     "include": [
         "src/**/*"
     ],
